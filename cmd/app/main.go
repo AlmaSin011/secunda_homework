@@ -32,11 +32,11 @@ func run() error {
 	}
 
 	// --- Logger ---------------------------------------------------------
-	log := logger.New(cfg.LogLvl)
+	log := logger.New(cfg.Log.Level)
 	slog.SetDefault(log)
 	log.Info("starting service",
 		slog.String("env", cfg.AppEnv),
-		slog.String("port", cfg.Port),
+		slog.String("port", cfg.HTTP.Port),
 	)
 
 	// --- Router ---------------------------------------------------------
@@ -55,7 +55,7 @@ func run() error {
 
 	// --- Server + graceful shutdown -------------------------------------
 	srv := &http.Server{
-		Addr:              ":" + cfg.Port,
+		Addr:              ":" + cfg.HTTP.Port,
 		Handler:           r,
 		ReadHeaderTimeout: 10 * time.Second,
 	}

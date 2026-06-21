@@ -85,8 +85,6 @@ services:
       JWT_TTL: ${JWT_TTL}
       RATE_LIMIT_RPS: ${RATE_LIMIT_RPS}
       RATE_LIMIT_BURST: ${RATE_LIMIT_BURST}
-      EMAIL_SERVICE_URL: ${EMAIL_SERVICE_URL}
-      EMAIL_TIMEOUT_MS: ${EMAIL_TIMEOUT_MS}
       METRICS_PATH: /metrics
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1"]
