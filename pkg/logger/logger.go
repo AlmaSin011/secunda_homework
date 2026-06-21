@@ -1,0 +1,27 @@
+// Package logger provides a structured slog logger configured from app config.
+package logger
+
+import (
+	"log/slog"
+	"os"
+	"strings"
+)
+
+// New returns a JSON slog.Logger with the given level string
+// ("debug" | "info" | "warn" | "error"). Unknown values fall back to info.
+func New(level string) *slog.Logger {
+	var lvl slog.Level
+	switch strings.ToLower(level) {
+	case "debug":
+		lvl = slog.LevelDebug
+	case "warn", "warning":
+		lvl = slog.LevelWarn
+	case "error":
+		lvl = slog.LevelError
+	default:
+		lvl = slog.LevelInfo
+	}
+
+	h := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: lvl})
+	return slog.New(h)
+}
