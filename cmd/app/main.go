@@ -13,7 +13,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/example/go-project/internal/cache"
 	"github.com/example/go-project/internal/config"
+	"github.com/example/go-project/internal/storage"
 	"github.com/example/go-project/pkg/logger"
 )
 
@@ -25,13 +27,12 @@ func main() {
 }
 
 func run() error {
-	// --- Config ---------------------------------------------------------
+	// --- Config
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	// --- Logger ---------------------------------------------------------
 	log := logger.New(cfg.Log.Level)
 	slog.SetDefault(log)
 	log.Info("starting service",
@@ -39,7 +40,37 @@ func run() error {
 		slog.String("port", cfg.HTTP.Port),
 	)
 
-	// --- Router ---------------------------------------------------------
+	rootCtx, rootCancel := context.WithCancel(context.Background())
+	defer rootCancel()
+
+	db, err := storage.OpenMySQL(rootCtx, storage.MySQLConfig{
+		DSN:             cfg.MySQL.DSN,
+		MaxOpenConns:    cfg.MySQL.MaxOpenConns,
+		MaxIdleConns:    cfg.MySQL.MaxIdleConns,
+		ConnMaxLifetime: cfg.MySQL.ConnMaxLifetime,
+		ConnMaxIdleTime: cfg.MySQL.ConnMaxIdleTime,
+	})
+	if err != nil {
+		return fmt.Errorf("open mysql: %w", err)
+	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Warn("mysql close", slog.String("err", err.Error()))
+		}
+	}()
+	log.Info("mysql connected")
+
+	rdb, err := cache.NewRedisCache(rootCtx, cfg.Redis)
+	if err != nil {
+		return fmt.Errorf("open redis: %w", err)
+	}
+	defer func() {
+		if err := rdb.Close(); err != nil {
+			log.Warn("redis close", slog.String("err", err.Error()))
+		}
+	}()
+	log.Info("redis connected")
+
 	if cfg.AppEnv == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -47,6 +78,12 @@ func run() error {
 	r.Use(gin.Recovery(), requestLogger(log))
 
 	r.GET("/healthz", func(c *gin.Context) {
+		pingCtx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+		defer cancel()
+		if err := db.PingContext(pingCtx); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "db_down", "error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 	r.GET("/ping", func(c *gin.Context) {
@@ -60,7 +97,6 @@ func run() error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	// Run server in a goroutine so the main goroutine can wait for a signal.
 	errCh := make(chan error, 1)
 	go func() {
 		log.Info("http server listening", slog.String("addr", srv.Addr))
@@ -69,7 +105,6 @@ func run() error {
 		}
 	}()
 
-	// Wait for SIGINT / SIGTERM or a fatal server error.
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
@@ -80,10 +115,10 @@ func run() error {
 		return fmt.Errorf("http server: %w", err)
 	}
 
-	// 10-second timeout for in-flight requests to finish.
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("server shutdown: %w", err)
 	}
 	log.Info("server stopped")
