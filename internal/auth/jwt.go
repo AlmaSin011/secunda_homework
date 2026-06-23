@@ -12,7 +12,6 @@ import (
 	"github.com/example/go-project/internal/config"
 )
 
-// Минимальный лимит секрета — HS256 с коротким ключом брутфорсится перебором.
 const minSecretLen = 32
 
 type Claims struct {

@@ -19,7 +19,6 @@ import (
 	"github.com/example/go-project/internal/storage"
 )
 
-// dsn из env. Тест пропускается, если переменная не задана.
 func mysqlTestDSN(t *testing.T) string {
 	dsn := os.Getenv("MYSQL_TEST_DSN")
 	if dsn == "" {
@@ -28,10 +27,9 @@ func mysqlTestDSN(t *testing.T) string {
 	return dsn
 }
 
-// migrationsDir — абсолютный путь к директории миграций относительно файла теста.
 func migrationsDir(t *testing.T) string {
 	t.Helper()
-	//nolint:gocritic // путь намеренно относительный — тесты запускаются с тегом integration.
+	//nolint:gocritic.
 	abs, err := filepath.Abs("../../migrations")
 	if err != nil {
 		t.Fatalf("resolve migrations dir: %v", err)
@@ -63,7 +61,6 @@ func TestMigrationUpDown(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = runMigrations(dsn, mdir, "down") })
 
-	// Проверяем, что все 6 таблиц созданы.
 	wantTables := []string{
 		"users", "teams", "team_members",
 		"tasks", "task_history", "task_comments",
@@ -115,7 +112,6 @@ func runMigrations(dsn, dir, cmd string) error {
 	return nil
 }
 
-// Smoke: после миграции можно вставить пользователя и команду.
 func TestSchemaInsertSmoke(t *testing.T) {
 	dsn := mysqlTestDSN(t)
 
