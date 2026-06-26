@@ -16,21 +16,32 @@ func NewCommentRepository(db *sqlx.DB) CommentRepository {
 	return &commentRepo{db: db}
 }
 
+const commentInsertQuery = `
+	INSERT INTO task_comments (task_id, user_id, body, created_at, updated_at)
+	VALUES (?, ?, ?, ?, ?)
+`
+
 func (r *commentRepo) Create(ctx context.Context, c entity.TaskComment) (uint64, error) {
-	const q = `
-		INSERT INTO task_comments (task_id, user_id, body, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?)
-	`
-	res, err := r.db.ExecContext(ctx, q, c.TaskID, c.UserID, c.Body, c.CreatedAt, c.UpdatedAt)
+	return r.InsertTx(ctx, nil, c)
+}
+
+func (r *commentRepo) InsertTx(ctx context.Context, exec DBX, c entity.TaskComment) (uint64, error) {
+	var runner DBX = r.db
+	if exec != nil {
+		runner = exec
+	}
+	res, err := runner.ExecContext(ctx, commentInsertQuery,
+		c.TaskID, c.UserID, c.Body, c.CreatedAt, c.UpdatedAt,
+	)
 	if err != nil {
 		if parseDuplicate(err) {
 			return 0, ErrAlreadyExists
 		}
-		return 0, fmt.Errorf("task_comments.Create: %w", err)
+		return 0, fmt.Errorf("task_comments.Insert: %w", err)
 	}
 	id, err := res.LastInsertId()
 	if err != nil {
-		return 0, fmt.Errorf("task_comments.Create.LastInsertId: %w", err)
+		return 0, fmt.Errorf("task_comments.Insert.LastInsertId: %w", err)
 	}
 	return uint64(id), nil
 }

@@ -4,54 +4,13 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/example/go-project/internal/auth"
 	"github.com/example/go-project/internal/config"
 	"github.com/example/go-project/internal/dto"
-	"github.com/example/go-project/internal/entity"
 )
-
-type fakeUserRepo struct {
-	mu    sync.Mutex
-	byID  map[uint64]entity.User
-	byKey map[string]uint64 // lower(email) → id
-	next  uint64
-}
-
-func newFakeUserRepo() *fakeUserRepo {
-	return &fakeUserRepo{
-		byID:  map[uint64]entity.User{},
-		byKey: map[string]uint64{},
-	}
-}
-
-func (f *fakeUserRepo) Create(_ context.Context, u entity.User) (uint64, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	key := strings.ToLower(u.Email)
-	if _, exists := f.byKey[key]; exists {
-		return 0, errors.New("duplicate") // страховка — service должен ловить раньше
-	}
-	f.next++
-	u.ID = f.next
-	f.byID[u.ID] = u
-	f.byKey[key] = u.ID
-	return u.ID, nil
-}
-
-func (f *fakeUserRepo) FindByEmail(_ context.Context, email string) (*entity.User, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	id, ok := f.byKey[strings.ToLower(email)]
-	if !ok {
-		return nil, nil
-	}
-	u := f.byID[id]
-	return &u, nil
-}
 
 const (
 	testSecret = "0123456789abcdef0123456789abcdef"

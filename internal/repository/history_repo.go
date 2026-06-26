@@ -16,12 +16,21 @@ func NewHistoryRepository(db *sqlx.DB) HistoryRepository {
 	return &historyRepo{db: db}
 }
 
+const historyInsertQuery = `
+	INSERT INTO task_history (task_id, changed_by, field, old_value, new_value, changed_at)
+	VALUES (?, ?, ?, ?, ?, ?)
+`
+
 func (r *historyRepo) Insert(ctx context.Context, h entity.TaskHistory) error {
-	const q = `
-		INSERT INTO task_history (task_id, changed_by, field, old_value, new_value, changed_at)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`
-	if _, err := r.db.ExecContext(ctx, q,
+	return r.InsertTx(ctx, nil, h)
+}
+
+func (r *historyRepo) InsertTx(ctx context.Context, exec DBX, h entity.TaskHistory) error {
+	var runner DBX = r.db
+	if exec != nil {
+		runner = exec
+	}
+	if _, err := runner.ExecContext(ctx, historyInsertQuery,
 		h.TaskID, h.ChangedBy, h.Field, h.OldValue, h.NewValue, h.ChangedAt,
 	); err != nil {
 		return fmt.Errorf("task_history.Insert: %w", err)

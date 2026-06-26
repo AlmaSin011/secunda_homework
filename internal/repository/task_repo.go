@@ -116,10 +116,20 @@ func (r *taskRepo) Count(ctx context.Context, f dto.TaskFilter) (int, error) {
 	return n, nil
 }
 
+// Update — обёртка над UpdateTx для автономного обновления.
 func (r *taskRepo) Update(ctx context.Context, id uint64, patch TaskPatch) (*entity.Task, error) {
+	return r.UpdateTx(ctx, nil, id, patch)
+}
+
+func (r *taskRepo) UpdateTx(ctx context.Context, exec DBX, id uint64, patch TaskPatch) (*entity.Task, error) {
 	if patch.Title == nil && patch.Description == nil && patch.Status == nil && patch.AssigneeID == nil && !patch.ClearAssignee {
 
 		return r.FindByID(ctx, id)
+	}
+
+	var runner DBX = r.db
+	if exec != nil {
+		runner = exec
 	}
 
 	set := make([]string, 0, 4)
@@ -152,7 +162,7 @@ func (r *taskRepo) Update(ctx context.Context, id uint64, patch TaskPatch) (*ent
 	q := fmt.Sprintf(`UPDATE tasks SET %s WHERE id = ? AND deleted_at IS NULL`, strings.Join(set, ", "))
 	args = append(args, id)
 
-	res, err := r.db.ExecContext(ctx, q, args...)
+	res, err := runner.ExecContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("tasks.Update: %w", err)
 	}
