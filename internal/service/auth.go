@@ -20,7 +20,6 @@ type UserRepository interface {
 
 var (
 	ErrEmailTaken         = errors.New("email already taken")
-	ErrUserNotFound       = errors.New("user not found")
 	ErrInvalidCredentials = errors.New("invalid credentials")
 )
 
@@ -42,7 +41,7 @@ func NewAuthService(repo UserRepository, tokens *auth.TokenManager, pw *auth.Pas
 
 func (s *AuthService) Register(ctx context.Context, req dto.RegisterRequest) (*dto.AuthResponse, error) {
 	if err := req.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrValidation, err)
 	}
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 
@@ -82,7 +81,7 @@ func (s *AuthService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 
 func (s *AuthService) Login(ctx context.Context, req dto.LoginRequest) (*dto.AuthResponse, error) {
 	if err := req.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrValidation, err)
 	}
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 

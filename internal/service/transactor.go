@@ -2,24 +2,19 @@ package service
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/jmoiron/sqlx"
+
+	"github.com/example/go-project/internal/repository"
 )
 
 // Transactor — абстракция над «выполнить функцию в транзакции».
 // Service получает её через интерфейс, чтобы не зависеть от *sqlx.DB в unit-тестах.
 type Transactor interface {
-	WithinTx(ctx context.Context, fn func(exec TxExec) error) error
+	WithinTx(ctx context.Context, fn func(exec repository.DBX) error) error
 }
 
-// TxExec — общий интерфейс над *sqlx.DB и *sqlx.Tx для выполнения запросов.
-// Реализуется обоими типами; фейковый Transactor может передать nil.
-type TxExec interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	GetContext(ctx context.Context, dest any, query string, args ...any) error
-	SelectContext(ctx context.Context, dest any, query string, args ...any) error
-}
+type TxExec = repository.DBX
 
 type sqlxTransactor struct {
 	db *sqlx.DB
@@ -29,7 +24,7 @@ func NewSQLXTransactor(db *sqlx.DB) Transactor {
 	return &sqlxTransactor{db: db}
 }
 
-func (t *sqlxTransactor) WithinTx(ctx context.Context, fn func(exec TxExec) error) error {
+func (t *sqlxTransactor) WithinTx(ctx context.Context, fn func(exec repository.DBX) error) error {
 	tx, err := t.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err

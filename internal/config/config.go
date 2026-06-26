@@ -150,7 +150,7 @@ func (c *Config) validate() error {
 	if strings.TrimSpace(c.JWT.Secret) == "" {
 		return errors.New("JWT_SECRET is required")
 	}
-	// В проде требуем длинный секрет — иначе это легко брутфорсится.
+
 	if c.AppEnv == "production" && len(c.JWT.Secret) < 32 {
 		return fmt.Errorf("JWT_SECRET must be at least 32 chars in production (got %d)", len(c.JWT.Secret))
 	}

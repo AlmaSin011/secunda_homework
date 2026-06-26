@@ -13,8 +13,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/example/go-project/internal/auth"
 	"github.com/example/go-project/internal/cache"
 	"github.com/example/go-project/internal/config"
+	"github.com/example/go-project/internal/handler"
+	"github.com/example/go-project/internal/middleware"
+	"github.com/example/go-project/internal/repository"
+	"github.com/example/go-project/internal/router"
+	"github.com/example/go-project/internal/service"
 	"github.com/example/go-project/internal/storage"
 	"github.com/example/go-project/pkg/logger"
 )
@@ -71,11 +77,47 @@ func run() error {
 	}()
 	log.Info("redis connected")
 
+	tokens, err := auth.NewTokenManager(cfg.JWT)
+	if err != nil {
+		return fmt.Errorf("token manager: %w", err)
+	}
+	hasher := auth.NewPasswordHasher(0) // 0 → bcrypt.DefaultCost
+
+	userRepo := repository.NewUserRepository(db)
+	teamRepo := repository.NewTeamRepository(db)
+	taskRepo := repository.NewTaskRepository(db)
+	historyRepo := repository.NewHistoryRepository(db)
+	commentRepo := repository.NewCommentRepository(db)
+	statsRepo := repository.NewStatsRepository(db)
+
+	tx := service.NewSQLXTransactor(db)
+	authSvc := service.NewAuthService(userRepo, tokens, hasher)
+	teamSvc := service.NewTeamService(teamRepo, userRepo, tx)
+	taskSvc := service.NewTaskService(taskRepo, historyRepo, teamRepo, rdb, tx)
+	commentSvc := service.NewCommentService(commentRepo, taskRepo, teamRepo, tx)
+	statsSvc := service.NewStatsService(statsRepo)
+
+	authH := handler.NewAuthHandler(authSvc, log)
+	teamH := handler.NewTeamHandler(teamSvc, log)
+	taskH := handler.NewTaskHandler(taskSvc, log)
+	commentH := handler.NewCommentHandler(commentSvc, log)
+	statsH := handler.NewStatsHandler(statsSvc, log)
+
+	// --- Router + middleware
 	if cfg.AppEnv == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
-	r := gin.New()
-	r.Use(gin.Recovery(), requestLogger(log))
+	r := router.New(router.Deps{
+		Logger:      log,
+		TokenMgr:    tokens,
+		Limiter:     middleware.NewPerUserLimiter(cfg.RateLimit.RPS, cfg.RateLimit.Burst),
+		Auth:        authH,
+		Teams:       teamH,
+		Tasks:       taskH,
+		Comments:    commentH,
+		Stats:       statsH,
+		MetricsPath: cfg.Metrics.Path,
+	})
 
 	r.GET("/healthz", func(c *gin.Context) {
 		pingCtx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
@@ -85,9 +127,6 @@ func run() error {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
-	})
-	r.GET("/ping", func(c *gin.Context) {
-		c.String(http.StatusOK, "pong")
 	})
 
 	// --- Server + graceful shutdown -------------------------------------
@@ -123,18 +162,4 @@ func run() error {
 	}
 	log.Info("server stopped")
 	return nil
-}
-
-func requestLogger(log *slog.Logger) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		start := time.Now()
-		c.Next()
-		log.Info("http request",
-			slog.String("method", c.Request.Method),
-			slog.String("path", c.Request.URL.Path),
-			slog.Int("status", c.Writer.Status()),
-			slog.Duration("latency", time.Since(start)),
-			slog.String("client_ip", c.ClientIP()),
-		)
-	}
 }
