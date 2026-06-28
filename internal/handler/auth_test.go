@@ -147,11 +147,11 @@ func TestLogin_OK(t *testing.T) {
 	svc, repo := newService(t)
 	// кладём пользователя в обход Register, чтобы не зависеть от bcrypt
 	hash, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.MinCost)
-	repo.byEmail["test@example.com"] = &entity.User{
+	repo.byEmail["bob@example.com"] = &entity.User{
 		ID:           1,
-		Email:        "test@example.com",
+		Email:        "bob@example.com",
 		PasswordHash: string(hash),
-		Name:         "Test",
+		Name:         "Bob",
 	}
 	r := newTestRouter(svc, mustTokenManager(t))
 
