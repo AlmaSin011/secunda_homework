@@ -49,7 +49,8 @@ func TestLoad_WithEnv(t *testing.T) {
 
 func TestLoad_Defaults(t *testing.T) {
 	t.Setenv("APP_ENV", "development")
-	t.Setenv("JWT_SECRET", "x") // валидация на длину только в production
+	t.Setenv("JWT_SECRET", "x")          // валидация на длину только в production
+	t.Setenv("METRICS_PATH", "/metrics") // фиксируем дефолт независимо от cwd
 
 	cfg, err := Load()
 	if err != nil {

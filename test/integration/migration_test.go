@@ -20,9 +20,13 @@ import (
 )
 
 func mysqlTestDSN(t *testing.T) string {
+	t.Helper()
 	dsn := os.Getenv("MYSQL_TEST_DSN")
 	if dsn == "" {
-		t.Skip("MYSQL_TEST_DSN not set, skipping integration test")
+		dsn = os.Getenv("TEST_MYSQL_DSN")
+	}
+	if dsn == "" {
+		t.Skip("MYSQL_TEST_DSN/TEST_MYSQL_DSN not set, skipping integration test")
 	}
 	return dsn
 }

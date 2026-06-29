@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/example/go-project/internal/dto"
 	"github.com/example/go-project/internal/entity"
 	"github.com/example/go-project/internal/repository"
 	"github.com/jmoiron/sqlx"
@@ -22,7 +23,10 @@ func mustOpen(t *testing.T) *sqlx.DB {
 	t.Helper()
 	dsn := os.Getenv("TEST_MYSQL_DSN")
 	if dsn == "" {
-		t.Skip("TEST_MYSQL_DSN not set; skipping integration test")
+		dsn = os.Getenv("MYSQL_TEST_DSN")
+	}
+	if dsn == "" {
+		t.Skip("TEST_MYSQL_DSN/MYSQL_TEST_DSN not set; skipping integration test")
 	}
 	db, err := sqlx.Connect("mysql", dsn)
 	if err != nil {
@@ -34,7 +38,6 @@ func mustOpen(t *testing.T) *sqlx.DB {
 
 func cleanup(t *testing.T, db *sqlx.DB) {
 	t.Helper()
-	// Порядок важен из-за FK-ограничений.
 	_, _ = db.Exec("DELETE FROM task_comments")
 	_, _ = db.Exec("DELETE FROM task_history")
 	_, _ = db.Exec("DELETE FROM tasks")
@@ -198,11 +201,12 @@ func TestTaskRepositorySoftDelete(t *testing.T) {
 	tid, _ := teams.Create(ctx, entity.Team{Name: "T", CreatedBy: uid, CreatedAt: ts(), UpdatedAt: ts()})
 	_ = teams.AddMember(ctx, entity.TeamMember{UserID: uid, TeamID: tid, Role: entity.RoleOwner, JoinedAt: ts()})
 
+	desc := "desc"
 	id, err := tasks.Create(ctx, entity.Task{
 		TeamID:      tid,
 		Title:       "task",
-		Description: "desc",
-		Status:      entity.TaskStatusTodo,
+		Description: &desc,
+		Status:      entity.TaskTodo,
 		CreatedBy:   uid,
 		AssigneeID:  ptrUint64(uid),
 		CreatedAt:   ts(),
@@ -271,7 +275,7 @@ func TestStatsQueries(t *testing.T) {
 	taskID, _ := tasks.Create(ctx, entity.Task{
 		TeamID:     teamID,
 		Title:      "t1",
-		Status:     entity.TaskStatusTodo,
+		Status:     entity.TaskTodo,
 		CreatedBy:  creatorID,
 		AssigneeID: ptrUint64(creatorID),
 		CreatedAt:  ts(),
@@ -279,12 +283,14 @@ func TestStatsQueries(t *testing.T) {
 	})
 
 	recent := time.Now().Add(-1 * time.Hour)
+	oldVal := "todo"
+	newVal := "done"
 	if err := history.Insert(ctx, entity.TaskHistory{
 		TaskID:    taskID,
 		ChangedBy: ownerID,
 		Field:     "status",
-		OldValue:  "todo",
-		NewValue:  "done",
+		OldValue:  &oldVal,
+		NewValue:  &newVal,
 		ChangedAt: recent,
 	}); err != nil {
 		t.Fatalf("Insert history: %v", err)

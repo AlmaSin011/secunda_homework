@@ -9,6 +9,9 @@ dist/
 *.exe
 *.test
 *.out
+*.cover
+coverage.out
+coverage_report.txt
 
 .env
 .env.local
@@ -19,3 +22,6 @@ vendor/
 data/
 .mysql-data/
 .redis-data/
+
+/scripts/
+/test/testdata/
