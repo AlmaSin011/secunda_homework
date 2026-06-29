@@ -69,6 +69,10 @@ func (l *PerUserLimiter) gc(ttl time.Duration) {
 }
 
 func RateLimit(l *PerUserLimiter) gin.HandlerFunc {
+	if l == nil {
+
+		return func(c *gin.Context) { c.Next() }
+	}
 	go func() {
 		// раз в час чистим неактивных.
 		t := time.NewTicker(time.Hour)

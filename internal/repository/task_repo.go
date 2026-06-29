@@ -123,8 +123,8 @@ func (r *taskRepo) Update(ctx context.Context, id uint64, patch TaskPatch) (*ent
 
 func (r *taskRepo) UpdateTx(ctx context.Context, exec DBX, id uint64, patch TaskPatch) (*entity.Task, error) {
 	if patch.Title == nil && patch.Description == nil && patch.Status == nil && patch.AssigneeID == nil && !patch.ClearAssignee {
-
-		return r.FindByID(ctx, id)
+		// вернет текущее состояние
+		return r.findByIDWith(ctx, exec, id)
 	}
 
 	var runner DBX = r.db
@@ -154,9 +154,6 @@ func (r *taskRepo) UpdateTx(ctx context.Context, exec DBX, id uint64, patch Task
 		args = append(args, *patch.AssigneeID)
 	}
 
-	if len(set) == 1 {
-	}
-
 	set = append(set, "updated_at = CURRENT_TIMESTAMP")
 
 	q := fmt.Sprintf(`UPDATE tasks SET %s WHERE id = ? AND deleted_at IS NULL`, strings.Join(set, ", "))
@@ -170,18 +167,37 @@ func (r *taskRepo) UpdateTx(ctx context.Context, exec DBX, id uint64, patch Task
 	if err != nil {
 		return nil, fmt.Errorf("tasks.Update.RowsAffected: %w", err)
 	}
-	if n == 0 {
 
-		t, err := r.FindByID(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		if t.DeletedAt != nil {
-			return nil, fmt.Errorf("tasks.Update: %w", ErrNotFound)
-		}
-		return t, nil
+	updated, err := r.findByIDWith(ctx, runner, id)
+	if err != nil {
+		return nil, err
 	}
-	return r.FindByID(ctx, id)
+	if updated == nil {
+		return nil, fmt.Errorf("tasks.Update: %w", ErrNotFound)
+	}
+	if n == 0 && updated.DeletedAt != nil {
+		return nil, fmt.Errorf("tasks.Update: %w", ErrNotFound)
+	}
+	return updated, nil
+}
+
+func (r *taskRepo) findByIDWith(ctx context.Context, exec DBX, id uint64) (*entity.Task, error) {
+	const q = `
+		SELECT id, team_id, title, description, status, assignee_id, created_by, created_at, updated_at, deleted_at
+		FROM tasks WHERE id = ?
+	`
+	var runner DBX = r.db
+	if exec != nil {
+		runner = exec
+	}
+	var t entity.Task
+	if err := runner.GetContext(ctx, &t, q, id); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("tasks.FindByID: %w", err)
+	}
+	return &t, nil
 }
 
 func (r *taskRepo) SoftDelete(ctx context.Context, id uint64) error {

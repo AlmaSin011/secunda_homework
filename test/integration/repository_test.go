@@ -268,21 +268,25 @@ func TestStatsQueries(t *testing.T) {
 	creatorID, _ := users.Create(ctx, entity.User{Email: "creator@gfdfr.com", PasswordHash: "h", Name: "Creator", CreatedAt: ts(), UpdatedAt: ts()})
 
 	teamID, _ := teams.Create(ctx, entity.Team{Name: "Stats", CreatedBy: ownerID, CreatedAt: ts(), UpdatedAt: ts()})
-	_ = teams.AddMember(ctx, entity.TeamMember{UserID: ownerID, TeamID: teamID, Role: entity.RoleOwner, JoinedAt: ts()})
+	if err := teams.AddMember(ctx, entity.TeamMember{UserID: ownerID, TeamID: teamID, Role: entity.RoleOwner, JoinedAt: ts()}); err != nil {
+		t.Fatalf("AddMember owner: %v", err)
+	}
 
-	_ = creatorID
-
-	taskID, _ := tasks.Create(ctx, entity.Task{
+	now := time.Now()
+	taskID, err := tasks.Create(ctx, entity.Task{
 		TeamID:     teamID,
 		Title:      "t1",
 		Status:     entity.TaskTodo,
 		CreatedBy:  creatorID,
 		AssigneeID: ptrUint64(creatorID),
-		CreatedAt:  ts(),
-		UpdatedAt:  ts(),
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	})
+	if err != nil {
+		t.Fatalf("Create task: %v", err)
+	}
 
-	recent := time.Now().Add(-1 * time.Hour)
+	recent := now.Add(-1 * time.Hour)
 	oldVal := "todo"
 	newVal := "done"
 	if err := history.Insert(ctx, entity.TaskHistory{
@@ -300,45 +304,66 @@ func TestStatsQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TeamStatsLastWeek: %v", err)
 	}
-	if len(statsTeam) == 0 {
-		t.Errorf("expected at least one team in stats")
-	}
 
-	var ours dto.TeamStatsResponse
-	for _, s := range statsTeam {
-		if s.TeamID == teamID {
-			ours = s
+	var ours *dto.TeamStatsResponse
+	for i := range statsTeam {
+		if statsTeam[i].TeamID == teamID {
+			ours = &statsTeam[i]
+			break
 		}
 	}
-	if ours.TeamID == 0 {
-		t.Fatalf("team not in stats result")
+	if ours == nil {
+		t.Fatalf("team %d not in stats result: %+v", teamID, statsTeam)
 	}
-	if ours.MemberCount < 1 {
-		t.Errorf("expected >=1 member, got %d", ours.MemberCount)
+	if ours.MemberCount != 1 {
+		t.Errorf("expected MemberCount=1, got %d", ours.MemberCount)
 	}
-	if ours.DoneLast7Days < 1 {
-		t.Errorf("expected >=1 done in last week, got %d", ours.DoneLast7Days)
+	if ours.DoneLast7Days != 1 {
+		t.Errorf("expected DoneLast7Days=1, got %d", ours.DoneLast7Days)
+	}
+	if ours.TeamName != "Stats" {
+		t.Errorf("expected TeamName=Stats, got %q", ours.TeamName)
 	}
 
 	orphans, err := stats.OrphanTasks(ctx)
 	if err != nil {
 		t.Fatalf("OrphanTasks: %v", err)
 	}
-	found := false
-	for _, o := range orphans {
-		if o.TaskID == taskID {
-			found = true
+	var orphan *dto.OrphanTaskResponse
+	for i := range orphans {
+		if orphans[i].TaskID == taskID {
+			orphan = &orphans[i]
+			break
 		}
 	}
-	if !found {
-		t.Errorf("expected taskID %d in orphans, got %+v", taskID, orphans)
+	if orphan == nil {
+		t.Fatalf("expected taskID %d in orphans, got %+v", taskID, orphans)
+	}
+	if orphan.AssigneeID == nil || *orphan.AssigneeID != creatorID {
+		t.Errorf("expected AssigneeID=%d, got %v", creatorID, orphan.AssigneeID)
+	}
+	if orphan.AssigneeEmail == nil || *orphan.AssigneeEmail != "creator@gfdfr.com" {
+		t.Errorf("expected AssigneeEmail=creator@gfdfr.com, got %v", orphan.AssigneeEmail)
 	}
 
 	top, err := stats.TopCreatorsByTeam(ctx, 7, 5)
 	if err != nil {
 		t.Fatalf("TopCreatorsByTeam: %v", err)
 	}
-	if len(top) == 0 {
-		t.Errorf("expected at least one entry in TopCreatorsByTeam")
+	var oursTop *dto.TopCreatorEntry
+	for i := range top {
+		if top[i].TeamID == teamID && top[i].UserID == creatorID {
+			oursTop = &top[i]
+			break
+		}
+	}
+	if oursTop == nil {
+		t.Fatalf("expected creator %d in team %d TopCreatorsByTeam, got %+v", creatorID, teamID, top)
+	}
+	if oursTop.TaskCount != 1 {
+		t.Errorf("expected TaskCount=1, got %d", oursTop.TaskCount)
+	}
+	if oursTop.Rank != 1 {
+		t.Errorf("expected Rank=1, got %d", oursTop.Rank)
 	}
 }

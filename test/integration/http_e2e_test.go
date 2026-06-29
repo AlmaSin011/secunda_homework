@@ -78,7 +78,9 @@ func newHTTPHarness(t *testing.T) *httpHarness {
 	commentSvc := service.NewCommentService(commentRepo, taskRepo, teamRepo, tx)
 	statsSvc := service.NewStatsService(statsRepo)
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}))
 	r := router.New(router.Deps{
 		Logger:      logger,
 		TokenMgr:    tm,
@@ -153,9 +155,9 @@ func (h *httpHarness) register(t *testing.T, email, name string) (token string, 
 	if resp.status != http.StatusCreated {
 		t.Fatalf("register: status=%d body=%s", resp.status, resp.raw)
 	}
-	data, _ := resp.body["data"].(map[string]any)
+	data := mustData(t, resp.body)
 	tok, _ := data["token"].(string)
-	userObj, _ := data["user"].(map[string]any)
+	userObj := data["user"].(map[string]any)
 	idF, _ := userObj["id"].(float64)
 	return tok, uint64(idF), resp.status
 }
@@ -169,7 +171,7 @@ func (h *httpHarness) login(t *testing.T, email string) string {
 	if resp.status != http.StatusOK {
 		t.Fatalf("login: status=%d body=%s", resp.status, resp.raw)
 	}
-	data, _ := resp.body["data"].(map[string]any)
+	data := mustData(t, resp.body)
 	tok, _ := data["token"].(string)
 	return tok
 }
@@ -395,7 +397,7 @@ func TestHTTP_CommentFlow(t *testing.T) {
 		"name": "Comment Team",
 	})
 	data, _ := create.body["data"].(map[string]any)
-	teamID := uint64(data["id"].(float64))
+	teamID := mustFieldInt(t, data, "id")
 
 	tCreate := h.do(t, http.MethodPost, "/api/v1/tasks", ownerTok, map[string]any{
 		"team_id": teamID,
@@ -406,7 +408,7 @@ func TestHTTP_CommentFlow(t *testing.T) {
 		t.Fatalf("create task: %d", tCreate.status)
 	}
 	data, _ = tCreate.body["data"].(map[string]any)
-	taskID := uint64(data["id"].(float64))
+	taskID := mustFieldInt(t, data, "id")
 
 	c1 := h.do(t, http.MethodPost,
 		fmt.Sprintf("/api/v1/tasks/%d/comments", taskID),
@@ -475,7 +477,7 @@ func TestHTTP_StatsEndpoints(t *testing.T) {
 		"name": "Stats Team",
 	})
 	data, _ := create.body["data"].(map[string]any)
-	teamID := uint64(data["id"].(float64))
+	teamID := mustFieldInt(t, data, "id")
 
 	_ = h.do(t, http.MethodPost,
 		fmt.Sprintf("/api/v1/teams/%d/invite", teamID), ownerTok,
@@ -550,7 +552,7 @@ func TestHTTP_UnauthorizedAndForbidden(t *testing.T) {
 		"name": "User Team",
 	})
 	data, _ := create.body["data"].(map[string]any)
-	teamID := uint64(data["id"].(float64))
+	teamID := mustFieldInt(t, data, "id")
 
 	listing := h.do(t, http.MethodGet, fmt.Sprintf("/api/v1/teams/%d/members", teamID), tok, nil)
 	if listing.status != http.StatusOK {
@@ -608,4 +610,31 @@ func taskIDByTitle(t *testing.T, h *httpHarness, tok string, teamID uint64, titl
 func asString(v any) string {
 	s, _ := v.(string)
 	return s
+}
+
+// mustData извлекает обёртку {"data": ...} или фейлит тест с понятным сообщением.
+func mustData(t *testing.T, body map[string]any) map[string]any {
+	t.Helper()
+	if body == nil {
+		t.Fatalf("response body is nil")
+	}
+	data, ok := body["data"].(map[string]any)
+	if !ok || data == nil {
+		t.Fatalf("response has no data envelope: %+v", body)
+	}
+	return data
+}
+
+// mustFieldInt достаёт числовое поле из обёртки или фейлит тест.
+func mustFieldInt(t *testing.T, m map[string]any, key string) uint64 {
+	t.Helper()
+	raw, ok := m[key]
+	if !ok {
+		t.Fatalf("field %q missing: %+v", key, m)
+	}
+	f, ok := raw.(float64)
+	if !ok {
+		t.Fatalf("field %q not a number: %T", key, raw)
+	}
+	return uint64(f)
 }

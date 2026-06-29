@@ -33,17 +33,24 @@ func mysqlTestDSN(t *testing.T) string {
 
 func migrationsDir(t *testing.T) string {
 	t.Helper()
-	//nolint:gocritic.
 	abs, err := filepath.Abs("../../migrations")
 	if err != nil {
 		t.Fatalf("resolve migrations dir: %v", err)
 	}
-	return abs
+	return filepath.ToSlash(abs)
+}
+
+func migrationsURL(t *testing.T) string {
+	t.Helper()
+	_ = migrationsDir(t)
+	return "file://./"
 }
 
 func TestMigrationUpDown(t *testing.T) {
 	dsn := mysqlTestDSN(t)
-	mdir := migrationsDir(t)
+	restore := withMigrationsCWD(t)
+	defer restore()
+	murl := migrationsURL(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -60,10 +67,10 @@ func TestMigrationUpDown(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	if err := runMigrations(dsn, mdir, "up"); err != nil {
+	if err := runMigrations(dsn, murl, "up"); err != nil {
 		t.Fatalf("migrate up: %v", err)
 	}
-	t.Cleanup(func() { _ = runMigrations(dsn, mdir, "down") })
+	t.Cleanup(func() { runMigrations(dsn, murl, "down") })
 
 	wantTables := []string{
 		"users", "teams", "team_members",
@@ -83,8 +90,7 @@ func TestMigrationUpDown(t *testing.T) {
 	}
 }
 
-func runMigrations(dsn, dir, cmd string) error {
-
+func runMigrations(dsn, url, cmd string) error {
 	sqlDB, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return err
@@ -95,7 +101,7 @@ func runMigrations(dsn, dir, cmd string) error {
 	if err != nil {
 		return err
 	}
-	m, err := migrate.NewWithDatabaseInstance("file://"+dir, "mysql", drv)
+	m, err := migrate.NewWithDatabaseInstance(url, "mysql", drv)
 	if err != nil {
 		return err
 	}
@@ -114,6 +120,22 @@ func runMigrations(dsn, dir, cmd string) error {
 		return fmt.Errorf("unknown cmd %q", cmd)
 	}
 	return nil
+}
+
+func withMigrationsCWD(t *testing.T) func() {
+	t.Helper()
+	mdir, err := filepath.Abs("../../migrations")
+	if err != nil {
+		t.Fatalf("abs migrations: %v", err)
+	}
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(mdir); err != nil {
+		t.Fatalf("chdir migrations: %v", err)
+	}
+	return func() { _ = os.Chdir(orig) }
 }
 
 func TestSchemaInsertSmoke(t *testing.T) {

@@ -49,6 +49,8 @@ func (s *TeamService) Create(ctx context.Context, actorID uint64, req dto.Create
 	t := entity.Team{
 		Name:      name,
 		CreatedBy: actorID,
+		CreatedAt: s.now(),
+		UpdatedAt: s.now(),
 	}
 	id, err := s.teams.Create(ctx, t)
 	if err != nil {

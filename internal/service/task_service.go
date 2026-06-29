@@ -75,6 +75,8 @@ func (s *TaskService) Create(ctx context.Context, actorID uint64, req dto.Create
 		Status:      req.Status,
 		AssigneeID:  req.AssigneeID,
 		CreatedBy:   actorID,
+		CreatedAt:   s.now(),
+		UpdatedAt:   s.now(),
 	}
 	id, err := s.tasks.Create(ctx, t)
 	if err != nil {

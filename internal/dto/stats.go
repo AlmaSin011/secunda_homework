@@ -1,14 +1,12 @@
 package dto
 
-import "time"
-
 // TeamStatsResponse — результат сложного запроса а):
 // "Название команды, число участников, число задач в статусе done за последние 7 дней".
 type TeamStatsResponse struct {
-	TeamID        uint64 `json:"team_id"`
-	TeamName      string `json:"team_name"`
-	MemberCount   int    `json:"member_count"`
-	DoneLast7Days int    `json:"done_last_7_days"`
+	TeamID        uint64 `db:"team_id" json:"team_id"`
+	TeamName      string `db:"team_name" json:"team_name"`
+	MemberCount   int    `db:"member_count" json:"member_count"`
+	DoneLast7Days int    `db:"done_last_7_days" json:"done_last_7_days"`
 }
 
 type TeamStatsListResponse struct {
@@ -18,15 +16,15 @@ type TeamStatsListResponse struct {
 // TopCreatorEntry — одна строка результата запроса б):
 // "Топ-3 создателей задач в каждой команде за последний месяц".
 type TopCreatorEntry struct {
-	TeamID     uint64    `json:"team_id"`
-	TeamName   string    `json:"team_name"`
-	UserID     uint64    `json:"user_id"`
-	UserName   string    `json:"user_name"`
-	UserEmail  string    `json:"user_email"`
-	TaskCount  int       `json:"task_count"`
-	Rank       int       `json:"rank"`
-	WindowFrom time.Time `json:"window_from"`
-	WindowTo   time.Time `json:"window_to"`
+	TeamID     uint64 `db:"team_id" json:"team_id"`
+	TeamName   string `db:"team_name" json:"team_name"`
+	UserID     uint64 `db:"user_id" json:"user_id"`
+	UserName   string `db:"user_name" json:"user_name"`
+	UserEmail  string `db:"user_email" json:"user_email"`
+	TaskCount  int    `db:"task_count" json:"task_count"`
+	Rank       int    `db:"rank" json:"rank"`
+	WindowFrom string `db:"window_from" json:"window_from"`
+	WindowTo   string `db:"window_to" json:"window_to"`
 }
 
 // TopCreatorsListResponse — топ-создатели по командам.
@@ -35,11 +33,11 @@ type TopCreatorsListResponse struct {
 }
 
 type OrphanTaskResponse struct {
-	TaskID        uint64  `json:"task_id"`
-	TeamID        uint64  `json:"team_id"`
-	Title         string  `json:"title"`
-	AssigneeID    *uint64 `json:"assignee_id"`
-	AssigneeEmail *string `json:"assignee_email,omitempty"`
+	TaskID        uint64  `db:"task_id" json:"task_id"`
+	TeamID        uint64  `db:"team_id" json:"team_id"`
+	Title         string  `db:"title" json:"title"`
+	AssigneeID    *uint64 `db:"assignee_id" json:"assignee_id"`
+	AssigneeEmail *string `db:"assignee_email" json:"assignee_email,omitempty"`
 }
 
 type OrphanTasksListResponse struct {
